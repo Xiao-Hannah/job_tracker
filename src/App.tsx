@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AddJobForm } from "./components/AddJobForm";
 import { PreviewModal } from "./components/PreviewModal";
-import { SearchFilter } from "./components/SearchFilter";
+import { SearchFilter, type StatusFilterOption } from "./components/SearchFilter";
 import { JobTable } from "./components/JobTable";
 import { JobModal } from "./components/JobModal";
 import type { Job, JobStatus, ExtractionSource } from "./types/job";
@@ -16,6 +16,8 @@ function today()  { return new Date().toISOString().slice(0, 10); }
 function nowIso() { return new Date().toISOString(); }
 function makeId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 interface PendingPreview {
   draft: Partial<Job>;
   source: ExtractionSource;
@@ -23,20 +25,18 @@ interface PendingPreview {
 }
 
 export default function App() {
-  const [jobs, setJobs]           = useState<Job[]>([]);
-  const [dbReady, setDbReady]     = useState(false);
-  const [dbError, setDbError]     = useState(false);
+  const [jobs, setJobs]             = useState<Job[]>([]);
+  const [dbReady, setDbReady]       = useState(false);
+  const [dbError, setDbError]       = useState(false);
   const [extracting, setExtracting] = useState(false);
-  const [search, setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState<JobStatus | "All">("All");
+  const [search, setSearch]         = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterOption>("All");
   const [selectedJob, setSelectedJob]   = useState<Job | null>(null);
-  const [preview, setPreview]     = useState<PendingPreview | null>(null);
+  const [preview, setPreview]       = useState<PendingPreview | null>(null);
 
-  // Debounce refs for note + status changes (avoid per-keystroke API calls)
   const noteTimers   = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const statusTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  // ── Load from SQLite on mount (+ one-time localStorage migration) ─────────
   useEffect(() => {
     apiFetchJobs()
       .then(async (data) => {
@@ -59,10 +59,17 @@ export default function App() {
       const data = await res.json();
       setPreview({
         draft: {
-          company: data.company || "", title: data.title || "",
-          description: data.description || "", link: url,
-          applicationDate: today(), status: "Applied",
-          statusUpdate: "", extractionSource: data.source,
+          company:     data.company     || "",
+          title:       data.title       || "",
+          description: data.description || "",
+          link:        url,
+          location:    data.location    || "",
+          salary:      data.salary      || "",
+          workType:    data.workType    || "",
+          applicationDate: today(),
+          status:      "Applied",
+          statusUpdate: "",
+          extractionSource: data.source,
         },
         source:  data.source  as ExtractionSource,
         warning: data.warning as string | undefined,
@@ -99,27 +106,28 @@ export default function App() {
       title:           draft.title           ?? "",
       description:     draft.description     ?? "",
       link:            draft.link            ?? "",
+      location:        draft.location        ?? "",
+      salary:          draft.salary          ?? "",
+      workType:        draft.workType        ?? "",
       applicationDate: draft.applicationDate ?? today(),
       status:          draft.status          ?? "Applied",
       statusUpdate:    draft.statusUpdate    ?? "",
       lastUpdated:     nowIso(),
       extractionSource: draft.extractionSource,
     };
-    setJobs((prev) => [job, ...prev]); // optimistic
+    setJobs((prev) => [job, ...prev]);
     setPreview(null);
     try {
       await apiCreateJob(job);
     } catch {
-      // Revert on failure
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
     }
   }
 
-  // ── Inline status change (debounced 400 ms) ────────────────────────────────
+  // ── Inline status change ──────────────────────────────────────────────────
   const handleStatusChange = useCallback((id: string, status: JobStatus) => {
     const ts = nowIso();
     setJobs((prev) => prev.map((j) => j.id === id ? { ...j, status, lastUpdated: ts } : j));
-
     const existing = statusTimers.current.get(id);
     if (existing) clearTimeout(existing);
     statusTimers.current.set(id, setTimeout(() => {
@@ -128,11 +136,10 @@ export default function App() {
     }, 400));
   }, []);
 
-  // ── Inline note change (debounced 800 ms) ─────────────────────────────────
+  // ── Inline note change ────────────────────────────────────────────────────
   const handleNoteChange = useCallback((id: string, note: string) => {
     const ts = nowIso();
     setJobs((prev) => prev.map((j) => j.id === id ? { ...j, statusUpdate: note, lastUpdated: ts } : j));
-
     const existing = noteTimers.current.get(id);
     if (existing) clearTimeout(existing);
     noteTimers.current.set(id, setTimeout(() => {
@@ -141,10 +148,9 @@ export default function App() {
     }, 800));
   }, []);
 
-  // ── Modal save (full record update) ───────────────────────────────────────
+  // ── Modal save ────────────────────────────────────────────────────────────
   async function handleSaveJob(updated: Job) {
     setJobs((prev) => prev.map((j) => j.id === updated.id ? updated : j));
-    // Also update the selectedJob so modal reflects latest if reopened
     setSelectedJob(null);
     await apiUpdateJob(updated.id, updated);
   }
@@ -156,13 +162,19 @@ export default function App() {
     await apiDeleteJob(id);
   }
 
+  // ── Filter ────────────────────────────────────────────────────────────────
   const filtered = jobs.filter((j) => {
     const q = search.toLowerCase();
     const matchesSearch = !q || j.company.toLowerCase().includes(q) || j.title.toLowerCase().includes(q);
-    return matchesSearch && (statusFilter === "All" || j.status === statusFilter);
+    if (!matchesSearch) return false;
+    if (statusFilter === "All") return true;
+    if (statusFilter === "needs-follow-up") {
+      if (j.status !== "Interviewing" || !j.interviewDate) return false;
+      return Date.now() - new Date(j.interviewDate + "T00:00:00").getTime() > SEVEN_DAYS_MS;
+    }
+    return j.status === statusFilter;
   });
 
-  // ── Error state ───────────────────────────────────────────────────────────
   if (dbError) {
     return (
       <div className="app">

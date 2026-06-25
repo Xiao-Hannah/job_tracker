@@ -10,6 +10,7 @@ const SOURCE_LABELS: Record<ExtractionSource, { label: string; className: string
   "opengraph": { label: "Extracted via OpenGraph",    className: "badge-medium" },
   "html":      { label: "Extracted via HTML",         className: "badge-low"    },
   "manual":    { label: "Manual entry",               className: "badge-manual" },
+  "extension": { label: "Captured from Workday",      className: "badge-high"   },
   "failed":    { label: "Extraction failed",          className: "badge-failed" },
 };
 
@@ -106,6 +107,13 @@ export function PreviewModal({ draft: initial, source, warning, onSave, onCancel
               />
             </div>
           </div>
+          {(draft.location || draft.workType || draft.salary) && (
+            <div className="field-row preview-meta-chips">
+              {draft.location && <span className="meta-chip">{draft.location}</span>}
+              {draft.workType   && <span className="meta-chip">{draft.workType}</span>}
+              {draft.salary   && <span className="meta-chip salary-chip">{draft.salary}</span>}
+            </div>
+          )}
           {draft.link && (
             <div className="field-row">
               <label className="field-label">Link</label>

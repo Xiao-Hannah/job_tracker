@@ -2,12 +2,7 @@ import type { Job, JobStatus } from "../types/job";
 import { StatusBadge } from "./StatusBadge";
 
 const ALL_STATUSES: JobStatus[] = [
-  "Saved",
-  "Applied",
-  "Interviewing",
-  "Rejected",
-  "Offer",
-  "Withdrawn",
+  "Saved", "Applied", "Interviewing", "Rejected", "Offer", "Withdrawn",
 ];
 
 interface Props {
@@ -19,9 +14,14 @@ interface Props {
 
 function formatDate(iso: string) {
   if (!iso) return "—";
-  // applicationDate is YYYY-MM-DD; lastUpdated is full ISO
   const d = new Date(iso.includes("T") ? iso : iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function needsFollowUp(job: Job): boolean {
+  if (job.status !== "Interviewing" || !job.interviewDate) return false;
+  const ms = Date.now() - new Date(job.interviewDate + "T00:00:00").getTime();
+  return ms > 7 * 24 * 60 * 60 * 1000;
 }
 
 export function JobTable({ jobs, onRowClick, onStatusChange, onNoteChange }: Props) {
@@ -40,6 +40,8 @@ export function JobTable({ jobs, onRowClick, onStatusChange, onNoteChange }: Pro
           <tr>
             <th>Company</th>
             <th>Job Title</th>
+            <th>Location</th>
+            <th>Salary</th>
             <th>Link</th>
             <th>Applied</th>
             <th>Status</th>
@@ -51,11 +53,26 @@ export function JobTable({ jobs, onRowClick, onStatusChange, onNoteChange }: Pro
           {jobs.map((job) => (
             <tr
               key={job.id}
-              className="job-row"
+              className={`job-row${needsFollowUp(job) ? " follow-up-row" : ""}`}
               onClick={() => onRowClick(job)}
             >
               <td className="cell-company">{job.company || <span className="placeholder">—</span>}</td>
               <td className="cell-title">{job.title || <span className="placeholder">—</span>}</td>
+              <td className="cell-location">
+                {job.location ? (
+                  <span>
+                    {job.location}
+                    {job.workType && <span className="remote-tag">{job.workType}</span>}
+                  </span>
+                ) : job.workType ? (
+                  <span className="remote-tag">{job.workType}</span>
+                ) : (
+                  <span className="placeholder">—</span>
+                )}
+              </td>
+              <td className="cell-salary">
+                {job.salary || <span className="placeholder">—</span>}
+              </td>
               <td
                 className="cell-link"
                 onClick={(e) => e.stopPropagation()}
@@ -66,7 +83,10 @@ export function JobTable({ jobs, onRowClick, onStatusChange, onNoteChange }: Pro
                   </a>
                 ) : "—"}
               </td>
-              <td className="cell-date">{formatDate(job.applicationDate)}</td>
+              <td className="cell-date">
+                {formatDate(job.applicationDate)}
+                {needsFollowUp(job) && <span className="follow-up-tag" title="Interviewed 7+ days ago — no update">↻</span>}
+              </td>
               <td
                 className="cell-status"
                 onClick={(e) => e.stopPropagation()}
@@ -75,11 +95,8 @@ export function JobTable({ jobs, onRowClick, onStatusChange, onNoteChange }: Pro
                   className="status-inline-select"
                   value={job.status}
                   onChange={(e) => onStatusChange(job.id, e.target.value as JobStatus)}
-                  style={{ cursor: "pointer" }}
                 >
-                  {ALL_STATUSES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <StatusBadge status={job.status} />
               </td>

@@ -245,13 +245,42 @@ body {
   vertical-align: middle;
 }
 
-.cell-company { font-weight: 500; min-width: 130px; }
-.cell-title   { color: var(--text); min-width: 160px; }
-.cell-link    { min-width: 80px; }
-.cell-date    { white-space: nowrap; color: var(--text-muted); }
-.cell-status  { min-width: 140px; }
-.cell-note    { min-width: 180px; }
-.cell-updated { white-space: nowrap; color: var(--text-muted); font-size: 12.5px; }
+.cell-company   { font-weight: 500; min-width: 120px; }
+.cell-title     { color: var(--text); min-width: 150px; }
+.cell-location  { min-width: 120px; color: var(--text-muted); font-size: 12.5px; }
+.cell-salary    { min-width: 110px; color: var(--text-muted); font-size: 12.5px; white-space: nowrap; }
+.cell-link      { min-width: 70px; }
+.cell-date      { white-space: nowrap; color: var(--text-muted); }
+.cell-status    { min-width: 140px; }
+.cell-note      { min-width: 160px; }
+.cell-updated   { white-space: nowrap; color: var(--text-muted); font-size: 12.5px; }
+
+/* Remote tag inside location cell */
+.remote-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #ede9fe;
+  color: #6d28d9;
+  white-space: nowrap;
+}
+
+/* Follow-up row highlight */
+.follow-up-row { background: #fffbeb !important; }
+.follow-up-row:hover { background: #fef3c7 !important; }
+
+/* Follow-up indicator in date cell */
+.follow-up-tag {
+  display: inline-block;
+  margin-left: 5px;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+}
 
 .cell-link a {
   color: var(--accent);
@@ -623,6 +652,24 @@ body {
   line-height: 1.5;
 }
 .warning-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+/* Preview meta chips (location / remote / salary) */
+.preview-meta-chips {
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 82px; /* align with field-input column */
+}
+.meta-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+}
+.salary-chip { background: #d1fae5; color: #065f46; }
 
 /* Preview fields */
 .preview-fields {

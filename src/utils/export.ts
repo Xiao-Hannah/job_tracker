@@ -1,19 +1,12 @@
 import type { Job } from "../types/job";
 
 const HEADERS = [
-  "Company",
-  "Job Title",
-  "Link",
-  "Application Date",
-  "Status",
-  "Notes",
-  "Last Updated",
-  "Job Description",
+  "Company", "Job Title", "Location", "Remote", "Salary",
+  "Link", "Application Date", "Status", "Notes", "Last Updated", "Job Description",
 ];
 
 function cell(value: string) {
-  // Escape double-quotes and wrap in quotes so commas / newlines inside are safe.
-  return `"${value.replace(/"/g, '""')}"`;
+  return `"${(value ?? "").replace(/"/g, '""')}"`;
 }
 
 function formatDate(iso: string) {
@@ -27,21 +20,13 @@ export function downloadCSV(jobs: Job[]) {
     HEADERS.map(cell).join(","),
     ...jobs.map((j) =>
       [
-        j.company,
-        j.title,
-        j.link,
-        formatDate(j.applicationDate),
-        j.status,
-        j.statusUpdate,
-        formatDate(j.lastUpdated),
-        j.description,
-      ]
-        .map(cell)
-        .join(",")
+        j.company, j.title, j.location ?? "", j.workType ?? "", j.salary ?? "",
+        j.link, formatDate(j.applicationDate),
+        j.status, j.statusUpdate, formatDate(j.lastUpdated), j.description,
+      ].map(cell).join(",")
     ),
   ].join("\r\n");
 
-  // BOM so Excel opens UTF-8 correctly without garbled characters
   const blob = new Blob(["﻿" + rows], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement("a"), {

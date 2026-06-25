@@ -11,6 +11,7 @@ export type ExtractionSource =
   | "opengraph"
   | "html"
   | "manual"
+  | "extension"
   | "failed";
 
 export interface Job {
@@ -20,8 +21,12 @@ export interface Job {
   description: string;
   link: string;
   applicationDate: string;
+  interviewDate?: string;
   status: JobStatus;
   statusUpdate: string;
   lastUpdated: string;
   extractionSource?: ExtractionSource;
+  location?: string;
+  salary?: string;
+  workType?: string;
 }

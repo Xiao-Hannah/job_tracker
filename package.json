@@ -14,7 +14,9 @@
   "dependencies": {
     "@libsql/client": "^0.17.3",
     "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
+    "googleapis": "^146.0.0",
     "node-html-parser": "^7.1.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

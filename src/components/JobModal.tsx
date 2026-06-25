@@ -87,12 +87,22 @@ export function JobModal({ job, onClose, onSave, onDelete }: Props) {
           </label>
 
           <label className="meta-row">
-            <span className="meta-label">Date</span>
+            <span className="meta-label">Applied</span>
             <input
               className="inline-input"
               type="date"
               value={draft.applicationDate}
               onChange={(e) => set("applicationDate", e.target.value)}
+            />
+          </label>
+
+          <label className="meta-row">
+            <span className="meta-label">Interview</span>
+            <input
+              className="inline-input"
+              type="date"
+              value={draft.interviewDate ?? ""}
+              onChange={(e) => set("interviewDate", e.target.value || undefined)}
             />
           </label>
 
