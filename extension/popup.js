@@ -13,15 +13,6 @@ function render(html) {
   root.innerHTML = html;
 }
 
-function showIdle() {
-  render(`<div class="idle">
-    <strong>Not a supported job page</strong>
-    Navigate to a job posting on<br>
-    <em>LinkedIn</em> or <em>Workday</em><br>
-    then open this popup.
-  </div>`);
-}
-
 function showError(msg) {
   render(`<div class="body"><div class="box box-error">${msg}</div></div>`);
 }
@@ -29,7 +20,7 @@ function showError(msg) {
 function showSuccess(title, company) {
   render(`<div class="body"><div class="box box-success">
     <strong>Saved!</strong><br>
-    ${esc(title)}${company ? ` at <strong>${esc(company)}</strong>` : ""}
+    ${esc(title || "Job")}${company ? ` at <strong>${esc(company)}</strong>` : ""}
     has been added to your job tracker.
   </div></div>`);
 }
@@ -39,7 +30,7 @@ function buildCard(data) {
   return `
     <div class="card">
       ${data.company ? `<div class="card-company">${esc(data.company)}</div>` : ""}
-      <div class="card-title">${esc(data.title || "(no title found)")}</div>
+      <div class="card-title">${esc(data.title || "(no title detected)")}</div>
       ${metaParts.length ? `<div class="card-meta">${metaParts.map((p) => `<span>${esc(p)}</span>`).join("")}</div>` : ""}
     </div>`;
 }
@@ -76,7 +67,7 @@ async function sendToTracker(data) {
 }
 
 async function main() {
-  render(`<div class="body"><div class="box box-info">Detecting page…</div></div>`);
+  render(`<div class="body"><div class="box box-info">Reading page…</div></div>`);
 
   let tab;
   try {
@@ -86,17 +77,41 @@ async function main() {
     return;
   }
 
-  if (!tab?.id || !tab?.url) { showIdle(); return; }
+  if (!tab?.id || !tab?.url) {
+    render(`<div class="idle"><strong>No active tab</strong></div>`);
+    return;
+  }
 
+  // Reject non-http pages (chrome://, about:, extensions, etc.)
+  if (!/^https?:\/\//.test(tab.url)) {
+    render(`<div class="idle">
+      <strong>Cannot access this page</strong>
+      Navigate to a job posting on any website,<br>then open this popup.
+    </div>`);
+    return;
+  }
+
+  // Set header subtitle to the site hostname
   const hostname = (() => { try { return new URL(tab.url).hostname; } catch { return ""; } })();
-  const isWorkday  = /\.(myworkdayjobs|workdayjobs)\.com$/.test(hostname);
-  const isLinkedIn = hostname === "www.linkedin.com" && (tab.url || "").includes("/jobs/");
-  if (!isWorkday && !isLinkedIn) { showIdle(); return; }
-
   const subEl = document.getElementById("header-sub");
-  if (subEl) subEl.textContent = isLinkedIn ? "LinkedIn" : "Workday";
+  if (subEl) {
+    if (/\.(myworkdayjobs|workdayjobs)\.com$/.test(hostname))  subEl.textContent = "Workday";
+    else if (hostname === "www.linkedin.com")                   subEl.textContent = "LinkedIn";
+    else subEl.textContent = hostname.replace(/^www\./, "");
+  }
 
-  // Ask the content script to scrape the page
+  // Inject content.js into the active tab (idempotent — script has a guard)
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+  } catch (e) {
+    showError(
+      `Cannot inject into this page.<br>` +
+      `<small style="opacity:.7">${esc(e.message)}</small>`
+    );
+    return;
+  }
+
+  // Ask the content script to scrape
   let scraped;
   try {
     const resp = await chrome.tabs.sendMessage(tab.id, { action: "scrape" });
@@ -111,10 +126,16 @@ async function main() {
     return;
   }
 
-  // Preview + send button
+  const btnLabel = scraped.title ? "Send to Job Tracker" : "Save URL Anyway";
+  const warning  = scraped.title ? "" :
+    `<div class="box box-info" style="margin-bottom:12px">
+      No job title detected — make sure you're on a job posting page.
+    </div>`;
+
   render(`<div class="body">
+    ${warning}
     ${buildCard(scraped)}
-    <button class="btn" id="send-btn">Send to Job Tracker</button>
+    <button class="btn" id="send-btn">${btnLabel}</button>
   </div>`);
 
   document.getElementById("send-btn").addEventListener("click", async () => {
