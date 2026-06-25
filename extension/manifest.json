@@ -1,15 +1,27 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Save job postings from any website to your local Job Tracker",
   "permissions": ["activeTab", "tabs", "scripting"],
   "host_permissions": [
     "<all_urls>",
+    "https://www.linkedin.com/*",
+    "https://jobright.ai/*",
     "http://localhost:3001/*"
   ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Send to Job Tracker"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.linkedin.com/jobs/view/*",
+        "*://jobright.ai/jobs/info/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }

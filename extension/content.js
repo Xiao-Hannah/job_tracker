@@ -397,6 +397,53 @@
       };
     }
 
+    // ── JobRight (jobright.ai/jobs/info/*) ───────────────────────────────────
+    if (/jobright\.ai/.test(h)) {
+      // Page title format: "Job Title at Company | Jobright.ai"
+      let title = "", company = "";
+      const rawTitle = document.title.trim();
+      const atMatch  = rawTitle.match(/^(.+?)\s+at\s+(.+?)\s*[|\-–]\s*Jobright/i);
+      if (atMatch) { title = atMatch[1].trim(); company = atMatch[2].trim(); }
+
+      // Fallback: first two distinct h2s in main (title then company)
+      if (!title) {
+        const h2s = Array.from(document.querySelectorAll("main h2, h2"))
+          .map((el) => firstLine(el))
+          .filter((t) => t && t.length > 1 && t.length < 200);
+        if (h2s[0]) title   = h2s[0];
+        if (h2s[1]) company = company || h2s[1];
+      }
+
+      // Location: text node sibling of the location icon
+      let location = "";
+      for (const img of document.querySelectorAll('img[alt*="location" i], img[alt*="pin" i]')) {
+        const t = getText(img.nextElementSibling || img.parentElement);
+        if (t && t.length < 150) { location = t.split("\n")[0].trim(); break; }
+      }
+      if (!location) location = trySelectors(["[class*='location']", "[class*='city']"]);
+
+      // Work type: text sibling of the remote/work-mode icon
+      let workType = "";
+      for (const img of document.querySelectorAll('img[alt="remote"], img[alt*="work" i], img[alt*="mode" i]')) {
+        const t = getText(img.nextElementSibling || img.parentElement);
+        if (t) {
+          if (/remote/i.test(t))        workType = "Remote";
+          else if (/hybrid/i.test(t))   workType = "Hybrid";
+          else if (/onsite|on.?site/i.test(t)) workType = "On-site";
+          if (workType) break;
+        }
+      }
+
+      return {
+        title,
+        company,
+        location,
+        workType,
+        description: getText(document.querySelector("main")),
+        salary:      "",
+      };
+    }
+
     return null;
   }
 
@@ -497,6 +544,122 @@
     // 3. Structural heuristics — last resort for truly unknown sites
     return scrapeHeuristic();
   }
+
+  // ─── Floating "Save to Tracker" button ────────────────────────────────────
+
+  const TRACKER_URL = "http://localhost:3001";
+
+  function runScraper() {
+    const h = window.location.hostname;
+    if (/\.(myworkdayjobs|workdayjobs)\.com$/.test(h)) return scrapeWorkday();
+    if (h === "www.linkedin.com") return scrapeLinkedIn();
+    return scrapeGeneric();
+  }
+
+  function buildPayload(data) {
+    const now = new Date();
+    return {
+      id:               `ext-${now.getTime()}-${Math.random().toString(36).slice(2, 6)}`,
+      company:          data.company     || "",
+      title:            data.title       || "",
+      description:      data.description || "",
+      link:             data.url         || "",
+      location:         data.location    || "",
+      salary:           data.salary      || "",
+      workType:         data.workType    || "",
+      applicationDate:  now.toISOString().slice(0, 10),
+      status:           "Applied",
+      statusUpdate:     "",
+      lastUpdated:      now.toISOString(),
+      extractionSource: "extension",
+    };
+  }
+
+  function isJobDetailPage() {
+    const h = window.location.hostname;
+    const p = window.location.pathname;
+    return (h === "www.linkedin.com"  && /^\/jobs\/view\//.test(p)) ||
+           (h === "jobright.ai"       && /^\/jobs\/info\//.test(p));
+  }
+
+  function injectFloatingButton() {
+    if (document.getElementById("__jt_save_btn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "__jt_save_btn";
+    btn.textContent = "Save to Tracker";
+    Object.assign(btn.style, {
+      position:   "fixed",
+      bottom:     "24px",
+      right:      "24px",
+      zIndex:     "2147483647",
+      padding:    "10px 18px",
+      background: "#2d7ef7",
+      color:      "#fff",
+      border:     "none",
+      borderRadius: "8px",
+      fontSize:   "14px",
+      fontWeight: "600",
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      cursor:     "pointer",
+      boxShadow:  "0 4px 14px rgba(0,0,0,.3)",
+      transition: "background 0.15s",
+      lineHeight: "1.4",
+    });
+
+    btn.addEventListener("mouseenter", () => { if (!btn.disabled) btn.style.background = "#1a6de3"; });
+    btn.addEventListener("mouseleave", () => { if (!btn.disabled) btn.style.background = "#2d7ef7"; });
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+      btn.style.background = "#6b7280";
+      btn.style.cursor = "not-allowed";
+
+      try {
+        const data = runScraper();
+        const res  = await fetch(`${TRACKER_URL}/api/jobs/manual`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(buildPayload(data)),
+        });
+        if (!res.ok) throw new Error(`Server ${res.status}`);
+        btn.textContent = "✅ Saved!";
+        btn.style.background = "#059669";
+      } catch (_) {
+        btn.textContent = "❌ Failed";
+        btn.style.background = "#dc2626";
+      }
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "Save to Tracker";
+        btn.style.background = "#2d7ef7";
+        btn.style.cursor = "pointer";
+      }, 2000);
+    });
+
+    document.body.appendChild(btn);
+  }
+
+  function tryInjectButton() {
+    if (isJobDetailPage()) injectFloatingButton();
+  }
+
+  // Initial attempt
+  tryInjectButton();
+
+  // SPA support: LinkedIn navigates without full page reloads.
+  // Watch for any DOM mutations that change the URL, then re-check after the
+  // new page content settles (1500 ms gives React time to render).
+  let __jtLastUrl = location.href;
+  new MutationObserver(() => {
+    if (location.href === __jtLastUrl) return;
+    __jtLastUrl = location.href;
+    const old = document.getElementById("__jt_save_btn");
+    if (old) old.remove();
+    setTimeout(tryInjectButton, 1500);
+  }).observe(document, { subtree: true, childList: true });
 
   // ─── Message listener ──────────────────────────────────────────────────────
 
